@@ -2,10 +2,14 @@
 //
 
 #include <iostream>
+#include "nlohmann/json.hpp"
 
-int main()
+int main(int argc, char* argv[])
 {
-    std::cout << "Hello World!\n";
+    for (int i = 0; i < argc; i++)
+    {
+        std::cout << argv[i] << "\n";
+    }
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
