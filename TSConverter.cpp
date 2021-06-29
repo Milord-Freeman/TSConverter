@@ -11,11 +11,19 @@
 
 int main(int argc, char* argv[])
 {
+#ifdef _DEBUG
+	const std::string pathToJsonFile = "C:/Users/Freeman/source/repos/TSConverter/ConvertFiles/FunctionsDump.txt"; //argv[1];
+	const std::string pathToPapyrusClassesFile = "C:/Users/Freeman/source/repos/TSConverter/ConvertFiles/papyrusDefaultClases.ts"; //argv[1];
+	const std::string pathToTypeScriptFile = "C:/Users/Freeman/source/repos/TSConverter/ConvertFiles/skyrimPlatform.ts";//argv[3];
+#else // DEBUG
 	// TODO: add try/catch block for bad input
 	const std::string pathToJsonFile = argv[1];
-	const std::string pathToTypeScriptFile = argv[2];
+	const std::string pathToPapyrusClassesFile = argv[2];
+	const std::string pathToTypeScriptFile = argv[3];
+#endif 
 
 	std::ifstream input(pathToJsonFile);
+	std::ifstream papyrusClasses(pathToPapyrusClassesFile);
 	std::ofstream output(pathToTypeScriptFile);
 
 	enum class mode
@@ -23,6 +31,7 @@ int main(int argc, char* argv[])
 		module = 0,
 		interface
 	};
+
 	const mode currentMode = mode::module; // 'interface' | 'module'
 	// TODO: Implement interface mode correctly
 
@@ -43,17 +52,13 @@ int main(int argc, char* argv[])
 		char firstChar = func(name.at(0));
 		name.erase(name.begin());
 
-		bool isDifference = false;
-		for (int i = 0; i < name.length(); i++)
-		{
-			if (toupper(name.at(i)) != name.at(i) || tolower(name.at(i)) != name.at(i))
-			{
-				isDifference = true;
-				break;
-			}
-		}
+		// TODO: refactor this please
+		auto lowerCaseName = name;
+		std::transform(lowerCaseName.begin(), lowerCaseName.end(), lowerCaseName.begin(), [](unsigned char c) { return std::tolower(c); });
+		auto upperCaseName = name;
+		std::transform(upperCaseName.begin(), upperCaseName.end(), upperCaseName.begin(), [](unsigned char c) { return std::toupper(c); });
 
-		if (isDifference)
+		if ((lowerCaseName == name) || (upperCaseName == name))
 			std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return std::tolower(c); });
 
 		return firstChar + name;
@@ -62,15 +67,15 @@ int main(int argc, char* argv[])
 	auto parseReturnValue = [&](std::string rawType, std::string objectTypeName) -> std::string
 	{
 		// Fuck C++ Strings types 
-		if (rawType == "Int" || rawType == "Float") return "number";
-		if (rawType == "Bool")						return "boolean";
-		if (rawType == "String")					return "string";
-		if (rawType == "IntArray" || "FloatArray")  return "number[] | null";
-		if (rawType == "BoolArray")					return "boolean[] | null";
-		if (rawType == "StringArray")				return "string[] | null";
-		if (rawType == "None")						return "void";
-		if (rawType == "Object")					return (!objectTypeName.empty() ? prettify(objectTypeName) : "Form") + " | null";
-		if (rawType == "ObjectArray")				return "PapyrusObject[] | null";
+		if (rawType == "Int" || rawType == "Float")				return "number";
+		if (rawType == "Bool")									return "boolean";
+		if (rawType == "String")								return "string";
+		if (rawType == "IntArray" || rawType == "FloatArray")   return "number[] | null";
+		if (rawType == "BoolArray")								return "boolean[] | null";
+		if (rawType == "StringArray")							return "string[] | null";
+		if (rawType == "None")									return "void";
+		if (rawType == "Object")								return (!objectTypeName.empty() ? prettify(objectTypeName) : "Form") + " | null";
+		if (rawType == "ObjectArray")							return "PapyrusObject[] | null";
 		//TODO: fix return value with bat rawType
 	};
 
@@ -93,21 +98,32 @@ int main(int argc, char* argv[])
 		output << "(";
 		bool isAddOrRemove = (funcName == "additem" || funcName == "removeitem");
 
-		for (int i = 0; auto & argument : f["arguments"]) {
-			bool isSetMotioTypeFistArg = funcName == "setmotiontype" && i;
-			i++;
-			std::string argType = isSetMotioTypeFistArg ? "MotionType" : parseReturnValue(argument["type"]["rawType"], argument["type"]["objectTypeName"]);
-			auto argumentName = (argument["name"] == "in") ? "_in" : argument["name"];
+#ifdef _DEBUG
+		auto debugFunctionJson = f.dump();
+#endif // _DEBUG
+
+		int i = 0; // Hotfx for find first MotionType argument
+		for (auto& argument : f.at("arguments")) 
+		{
+			bool isSetMotioTypeFistArg = ((funcName == "setmotiontype") && (i == 0));
+
+			std::string argType = 
+				isSetMotioTypeFistArg 
+				? "MotionType" 
+				: parseReturnValue(argument.at("type").at("rawType").get<std::string>(), argument.at("type").contains("objectTypeName") ? argument.at("type").at("objectTypeName").get<std::string>() : "");
+
+			auto argumentName = (argument.at("name").get<std::string>() == "in") ? "_in" : argument.at("name").get<std::string>();
 			output << argumentName << ": " << argType;
-			if (i != f["arguments"].size() - 1)
+			if (i != f.at("arguments").size() - 1)
 			{
 				output << ", ";
 			}
+			i++;
 		}
 
-		auto returnType = parseReturnValue(f["returnType"]["rawType"].get<std::string>(), f["returnType"]["objectTypeName"]);
+		auto returnType = parseReturnValue(f.at("returnType").at("rawType").get<std::string>(), f.at("returnType").contains("objectTypeName") ? f.at("returnType").at("objectTypeName").get<std::string>() : "");
 
-		if (f["isLatent"].get<bool>())
+		if (f.at("isLatent").get<bool>())
 		{
 			if (!isAddOrRemove)
 				returnType = "Promise<" + returnType + ">";
@@ -118,54 +134,85 @@ int main(int argc, char* argv[])
 
 	std::function<void(nlohmann::json)> dumpType = [&](nlohmann::json data) -> void
 	{
-		if (ignored.contains(data["name"].get<std::string>()) || dumped.contains(data["name"].get<std::string>())) {
+		if (ignored.contains(data.at("name").get<std::string>()) || dumped.contains(data.at("name").get<std::string>())) 
+		{
 			return;
 		}
 
-		if (data["parent"]) {
-			dumpType(data["parent"]);
+		if (data.contains("parent")) 
+		{
+			dumpType(j["types"].at(data["parent"].get<std::string>()));
 		}
 
+#ifdef _DEBUG
+		auto debugTypeJson = data.dump();
+		auto debugName = prettify(data["name"].get<std::string>());
+		auto debugParent = (data.contains("parent") ? prettify(data["parent"].get<std::string>()) : "PapyrusObject");
+#endif // _DEBUG
+
 		output << "\n// Based on " << prettify(data["name"].get<std::string>()) << ".pex\n";
-		output << "export declare class " << prettify(data["name"].get<std::string>()) << "extends" << (data["parent"] ? prettify(data["parent"]["name"]) : "PapyrusObject") << "\n";
+		output << "export declare class " << prettify(data["name"].get<std::string>()) << " extends " << (data.contains("parent") ? prettify(data["parent"].get<std::string>()) : "PapyrusObject") << "{\n";
 		output << tab << "static from(papyrusObject: PapyrusObject | null) : " << prettify(data["name"].get<std::string>()) << "| null; \n";
 		
-		for (auto& function : data["memberFunctions"])
+		for (auto& function : data.at("memberFunctions"))
 		{
-			dumpFunction(data["name"].get<std::string>(), function, false);
+			dumpFunction(data.at("name").get<std::string>(), function, false);
 		}
-		for (auto& function : data["globalFunctions"])
+		for (auto& function : data.at("globalFunctions"))
 		{
-			dumpFunction(data["name"].get<std::string>(), function, true);
+			dumpFunction(data.at("name").get<std::string>(), function, true);
 		}
 
 		output << "}\n";
 		dumped.insert(data["name"].get<std::string>());
 	};
 
-	if (!j["types"]["WorldSpace"])
+#ifdef _DEBUG
+	std::string debugJson = j.dump();
+#endif // _DEBUG
+
+	if (!j.at("types").contains("WorldSpace"))
 	{
 		j["types"]["WorldSpace"]["parent"] = "Form";
 		j["types"]["WorldSpace"]["globalFunctions"] = nlohmann::json::array();
 		j["types"]["WorldSpace"]["memberFunctions"] = nlohmann::json::array();
 	};
 
-	for (auto& typeName : j["types"].items()) 
+#ifdef _DEBUG
+	debugJson = j.dump();
+#endif // _DEBUG
+
+	for (auto& typeName : j.at("types").items()) 
 	{
-		auto& data = j["types"]["typeName"];
-		if (data["parent"]) 
-		{
-			j["types"]["typeName"]["parent"] = j["types"][data["parent"].get<std::string>()];
-		}
-		j["types"]["typeName"]["name"] = typeName.key();
+		// We don't need copy json data anymore
+		//if (typeName.value().contains("parent"))
+		//{
+		//	// TODO: hofix strange and illogical behavior with parent-child linking, we forget parent.name
+		//	//auto parentName = typeName.value().at("parent").get<std::string>();
+		//	//typeName.value().at("parent") = j.at("types").at(typeName.value().at("parent").get<std::string>());
+		//	//typeName.value().at("parent")["name"] = parentName;
+		//}
+		typeName.value()["name"] = typeName.key();
 	}
 
-	for (auto& typeName : j["types"]) \
+#ifdef _DEBUG
+	debugJson = j.dump();
+#endif // _DEBUG
+
+	// TODO: optimize i/o files 
+	output << "\n";
+	output << "/* eslint-disable @typescript-eslint/adjacent-overload-signatures */\n";
+	output << "/* eslint-disable @typescript-eslint/no-namespace */\n";
+	output << "// Generated automatically. Do not edit.\n";
+	output << getPrefix();
+	output << "\n";
+	output << papyrusClasses.rdbuf();
+
+	for (auto& typeName : j.at("types"))
 	{
 		dumpType(typeName);
 	}
 
 	output << getPostfix();
-	output.close();
 	return 0;
 }
