@@ -1,0 +1,3 @@
+project (TSConverter)
+add_executable(TSConverter TSConverter.cpp) 
+target_link_libraries(TSConverter nlohmann_json)
