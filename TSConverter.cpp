@@ -1,6 +1,7 @@
 
 #include <iostream>
 #include <iostream> // For stringstream
+#include <filesystem> // For exist()
 #include <iomanip> // For setw() 
 #include <cctype> // for toupper() and tolower()
 #include <fstream> // For ifstream and ofstream
@@ -12,15 +13,25 @@
 int main(int argc, char* argv[])
 {
 #ifdef _DEBUG
-	const std::string pathToJsonFile = "C:/Users/Freeman/source/repos/TSConverter/ConvertFiles/FunctionsDump.txt"; //argv[1];
-	const std::string pathToPapyrusClassesFile = "C:/Users/Freeman/source/repos/TSConverter/ConvertFiles/papyrusDefaultClases.ts"; //argv[1];
-	const std::string pathToTypeScriptFile = "C:/Users/Freeman/source/repos/TSConverter/ConvertFiles/skyrimPlatform.ts";//argv[3];
+	const std::filesystem::path pathToJsonFile = "ConvertFiles/FunctionsDump.txt"; //argv[1];
+	const std::filesystem::path pathToPapyrusClassesFile = "ConvertFiles/papyrusDefaultClasses.ts"; //argv[1];
+	const std::filesystem::path pathToTypeScriptFile = "ConvertFiles/skyrimPlatform.ts";//argv[3];
 #else // DEBUG
-	// TODO: add try/catch block for bad input
-	const std::string pathToJsonFile = argv[1];
-	const std::string pathToPapyrusClassesFile = argv[2];
-	const std::string pathToTypeScriptFile = argv[3];
+	const std::filesystem::path pathToJsonFile = argv[1];
+	const std::filesystem::path pathToPapyrusClassesFile = argv[2];
+	const std::filesystem::path pathToTypeScriptFile = argv[3];
 #endif 
+
+	if (!std::filesystem::exists(pathToJsonFile))
+	{
+		std::cout << "Json file: " << pathToJsonFile << " dosn't exits, check it.";
+		return 1;
+	}
+	if (!std::filesystem::exists(pathToPapyrusClassesFile))
+	{
+		std::cout << "Default papyrus classes file: " << pathToPapyrusClassesFile << " dosn't exits, check it.";
+		return 2;
+	}
 
 	std::ifstream input(pathToJsonFile);
 	std::ifstream papyrusClasses(pathToPapyrusClassesFile);
@@ -102,7 +113,7 @@ int main(int argc, char* argv[])
 		auto debugFunctionJson = f.dump();
 #endif // _DEBUG
 
-		int i = 0; // Hotfx for find first MotionType argument
+		int i = 0; // Hotfix for find first MotionType argument
 		for (auto& argument : f.at("arguments")) 
 		{
 			bool isSetMotioTypeFistArg = ((funcName == "setmotiontype") && (i == 0));
